@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Network Security Audit Dashboard</title>
+    <style>
+        /* Basic CSS for better presentation, similar to your style */
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 2rem;
+            background-color: #e0f7fa; /* Light cyan background */
+            color: #333;
+            line-height: 1.6;
+        }
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+            background-color: #ffffff;
+            padding: 2.5rem;
+            border-radius: 12px;
+            box-shadow: 0 6px 20px rgba(0, 0, 0, 0.1);
+        }
+        h1 {
+            color: #00796b; /* Teal for heading */
+            text-align: center;
+            margin-bottom: 2rem;
+            border-bottom: 2px solid #e0f2f7;
+            padding-bottom: 1rem;
+        }
+        .section {
+            background-color: #f0fdfc;
+            padding: 1.5rem;
+            margin-bottom: 1.5rem;
+            border-radius: 8px;
+            border: 1px solid #b2dfdb;
+        }
+        label {
+            display: block;
+            margin-bottom: 0.7rem;
+            font-weight: bold;
+            color: #004d40;
+        }
+        input[type="text"], textarea {
+            width: calc(100% - 22px); /* Adjust width for padding and border */
+            padding: 10px;
+            margin-bottom: 15px;
+            border: 1px solid #80cbc4;
+            border-radius: 5px;
+            font-size: 1rem;
+            resize: vertical; /* Allow textarea to be resized vertically */
+        }
+        textarea {
+            min-height: 80px;
+        }
+        button {
+            background-color: #009688; /* Teal button */
+            color: white;
+            padding: 0.8rem 1.5rem;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 1rem;
+            transition: background-color 0.3s ease;
+            margin-right: 10px; /* Space between buttons */
+        }
+        button:hover {
+            background-color: #00796b; /* Darker teal on hover */
+        }
+        #resultsOutput {
+            margin-top: 1.5rem;
+            padding: 1rem;
+            background-color: #e8f5e9; /* Light green for output */
+            border: 1px solid #a5d6a7;
+            border-radius: 8px;
+            font-size: 1.1rem;
+            font-weight: bold;
+            color: #2e7d32;
+        }
+        .result-item {
+            margin-bottom: 0.8rem;
+            padding-left: 1.5rem;
+            position: relative;
+        }
+        .result-item::before {
+            content: '•';
+            position: absolute;
+            left: 0;
+            color: #00796b;
+            font-weight: bold;
+        }
+        .risk {
+            background-color: #ffe0b2; /* Light orange for risks */
+            border: 1px solid #ffb74d;
+            color: #e65100;
+            font-weight: bold;
+            padding: 0.5rem;
+            border-radius: 5px;
+            margin-top: 0.5rem;
+        }
+        .recommendation {
+            background-color: #c8e6c9; /* Light green for recommendations */
+            border: 1px solid #81c784;
+            color: #2e7d32;
+            padding: 0.5rem;
+            border-radius: 5px;
+            margin-top: 0.5rem;
+            font-style: italic;
+        }
+        .no-issues {
+            background-color: #e8f5e9;
+            border-color: #a5d6a7;
+            color: #2e7d32;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🛡️ Network Security Audit Dashboard</h1>
+
+        <div class="section">
+            <label for="openPortsInput">1. Enter **Open Ports** (comma-separated, e.g., 22, 80, 3389):</label>
+            <input type="text" id="openPortsInput" placeholder="e.g., 21, 23, 80, 445, 3389">
+            <label for="servicesInput">2. Enter **Running Services** (comma-separated, e.g., FTP, HTTP, SMB):</label>
+            <input type="text" id="servicesInput" placeholder="e.g., telnet, ftp, http, rdp, sql">
+            <label for="firewallRulesInput">3. Enter **Firewall Rules Summary** (one rule per line, e.g., "Allow TCP 80 from Any"):</label>
+            <textarea id="firewallRulesInput" placeholder="e.g.,&#10;Allow TCP 22 from 192.168.1.0/24&#10;Allow TCP 80 from Any&#10;Deny All from Any"></textarea>
+            <button onclick="performAudit()">Perform Audit</button>
+            <button onclick="clearInputs()">Clear All</button>
+        </div>
+
+        <div id="resultsOutput" class="section no-issues">
+            Enter network details above and click 'Perform Audit' to see results.
+        </div>
+    </div>
+
+    <script>
+        function performAudit() {
+            const openPortsRaw = document.getElementById('openPortsInput').value;
+            const servicesRaw = document.getElementById('servicesInput').value;
+            const firewallRulesRaw = document.getElementById('firewallRulesInput').value;
+            const outputElement = document.getElementById('resultsOutput');
+
+            outputElement.innerHTML = ''; // Clear previous results
+            outputElement.classList.remove('no-issues'); // Remove no-issues class initially
+
+            const openPorts = openPortsRaw.split(',').map(p => parseInt(p.trim())).filter(p => !isNaN(p) && p > 0 && p <= 65535);
+            const services = servicesRaw.split(',').map(s => s.trim().toLowerCase()).filter(s => s !== '');
+            const firewallRules = firewallRulesRaw.split('\n').map(r => r.trim()).filter(r => r !== '');
+
+            let findings = [];
+
+            // --- Audit Logic ---
+
+            // 1. Audit Open Ports
+            const commonInsecurePorts = {
+                21: "FTP (File Transfer Protocol) - Often insecure (plain text passwords)",
+                23: "Telnet - Highly insecure (plain text communication)",
+                80: "HTTP (Web Server) - Insecure if sensitive data is transferred without HTTPS",
+                445: "SMB (Server Message Block) - Prone to exploits (e.g., WannaCry, EternalBlue) if not secured",
+                3389: "RDP (Remote Desktop Protocol) - Common target for brute-force attacks if not secured with strong passwords/MFA",
+                139: "NetBIOS Session Service - Legacy and can expose system info",
+                111: "RPCBind/Portmapper - Can lead to information disclosure",
+                2049: "NFS (Network File System) - Can be exploited if misconfigured"
+            };
+
+            openPorts.forEach(port => {
+                if (commonInsecurePorts[port]) {
+                    findings.push({
+                        type: 'risk',
+                        message: `**Port ${port} (${commonInsecurePorts[port]}) is open.** Consider if it's strictly necessary and ensure it's properly secured.`
+                    });
+                } else if (port > 1023 && port < 49152) { // Common ephemeral/registered ports, not always insecure but good to note
+                    findings.push({
+                        type: 'info',
+                        message: `Port ${port} is open. Ensure the service running on it is secure and necessary.`
+                    });
+                }
+            });
+
+            // 2. Audit Running Services
+            const insecureServices = {
+                "telnet": "Telnet (plain text passwords, unencrypted communication)",
+                "ftp": "FTP (often plain text passwords)",
+                "smb": "SMB (potential for vulnerabilities like EternalBlue)",
+                "rdp": "RDP (brute-force target)",
+                "netbios": "NetBIOS (legacy, info disclosure)",
+                "http": "HTTP (unencrypted web traffic - prefer HTTPS)"
+            };
+
+            services.forEach(service => {
+                if (insecureServices[service]) {
+                    findings.push({
+                        type: 'risk',
+                        message: `**Service '${service}' detected:** ${insecureServices[service]}. Evaluate its necessity and consider more secure alternatives (e.g., SFTP/SSH instead of FTP, HTTPS instead of HTTP).`
+                    });
+                }
+            });
+
+            // 3. Audit Firewall Rules (basic pattern matching)
+            firewallRules.forEach(rule => {
+                const lowerRule = rule.toLowerCase();
+                if (lowerRule.includes("allow") && lowerRule.includes("any") && (lowerRule.includes("from any") || lowerRule.includes("to any"))) {
+                    if (!lowerRule.includes("deny")) { // Simple check to avoid flagging "Deny All from Any"
+                        findings.push({
+                            type: 'risk',
+                            message: `**Broad 'Allow' rule found: "${rule}".** Allowing traffic 'from Any' or 'to Any' is generally insecure. Restrict access to specific IPs/networks.`
+                        });
+                    }
+                }
+                if (lowerRule.includes("allow tcp 23") || lowerRule.includes("allow telnet")) {
+                     findings.push({
+                        type: 'risk',
+                        message: `**Insecure service rule found: "${rule}".** Allowing Telnet (port 23) is highly discouraged due to plain text communication.`
+                    });
+                }
+                 if (lowerRule.includes("allow tcp 21") || lowerRule.includes("allow ftp")) {
+                     findings.push({
+                        type: 'risk',
+                        message: `**Insecure service rule found: "${rule}".** Allowing FTP (port 21) can expose credentials. Consider SFTP or SCP.`
+                    });
+                }
+            });
+
+
+            // --- Display Results ---
+            if (findings.length === 0) {
+                outputElement.classList.add('no-issues');
+                outputElement.innerHTML = '<div class="result-item no-issues">✅ **No significant security issues detected based on your input.** Keep up the good work!</div>';
+            } else {
+                let uniqueFindings = new Set(); // Use a Set to store unique findings as strings
+                findings.forEach(f => uniqueFindings.add(JSON.stringify(f)));
+
+                Array.from(uniqueFindings).forEach(findingStr => {
+                    const finding = JSON.parse(findingStr);
+                    const div = document.createElement('div');
+                    div.classList.add('result-item');
+
+                    let itemContent = finding.message;
+                    let additionalClass = '';
+
+                    if (finding.type === 'risk') {
+                        itemContent = `<span class="risk">🚨 **Risk Detected:** ${finding.message}</span>`;
+                    } else if (finding.type === 'info') {
+                        itemContent = `<span class="warning">⚠️ **Info:** ${finding.message}</span>`;
+                    }
+                    
+                    // Add recommendations for common risks
+                    if (finding.message.includes("Port 21 (FTP)")) {
+                        itemContent += `<br><span class="recommendation">Recommendation: Use SFTP or SCP instead of FTP.</span>`;
+                    } else if (finding.message.includes("Port 23 (Telnet)")) {
+                        itemContent += `<br><span class="recommendation">Recommendation: Use SSH instead of Telnet for secure remote access.</span>`;
+                    } else if (finding.message.includes("Port 80 (HTTP)")) {
+                        itemContent += `<br><span class="recommendation">Recommendation: Implement HTTPS with SSL/TLS for all web traffic.</span>`;
+                    } else if (finding.message.includes("Port 3389 (RDP)")) {
+                        itemContent += `<br><span class="recommendation">Recommendation: Secure RDP with strong passwords, Multi-Factor Authentication (MFA), and restrict access to trusted IPs.</span>`;
+                    } else if (finding.message.includes("Broad 'Allow' rule found")) {
+                        itemContent += `<br><span class="recommendation">Recommendation: Apply the principle of least privilege; only allow necessary traffic from specific sources.</span>`;
+                    }
+
+                    div.innerHTML = itemContent;
+                    outputElement.appendChild(div);
+                });
+            }
+        }
+
+        function clearInputs() {
+            document.getElementById('openPortsInput').value = '';
+            document.getElementById('servicesInput').value = '';
+            document.getElementById('firewallRulesInput').value = '';
+            const outputElement = document.getElementById('resultsOutput');
+            outputElement.innerHTML = 'Enter network details above and click \'Perform Audit\' to see results.';
+            outputElement.classList.add('no-issues');
+        }
+    </script>
+</body>
+</html>
